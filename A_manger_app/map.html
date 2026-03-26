@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>冷链运输全局监控</title>
+    <style>
+        html, body, #container {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        /* 自定义车辆标签样式 */
+        .truck-marker {
+            background-color: #fff;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .truck-icon {
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        .temp-normal { color: #00b300; font-weight: bold; }
+        .temp-alert { color: #ff0000; font-weight: bold; animation: blink 1s infinite; }
+        
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+    <!-- 请注意：这里的 key 是一把测试 key，实际商用请替换为您自己在高德开放平台申请的 Web端(JS API) Key -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=62f5f142271df07d10e53a31c510db9f"></script>
+</head>
+<body>
+<div id="container"></div>
+
+<script>
+    // 1. 初始化地图，中心点设为北京
+    var map = new AMap.Map('container', {
+        zoom: 11,
+        center: [116.397428, 39.90923], 
+        mapStyle: 'amap://styles/normal' // 可选黑暗模式 'amap://styles/dark'
+    });
+
+    // 存储所有车辆的 Marker (key 为 order_id)
+    var truckMarkers = {};
+
+    // 2. QML 调用的 JavaScript 接口：更新车辆位置和状态
+    // jsonStr 是从后端传来的标准 JSON 字符串
+    function updateTruckData(jsonStr) {
+        try {
+            var data = JSON.parse(jsonStr);
+            var orderId = data.order_id;
+            var lng = data.location.longitude;
+            var lat = data.location.latitude;
+            var temp = data.cargo_status.current_temp;
+            var isAlert = data.cargo_status.is_alert;
+
+            // 动态生成 HTML 标签内容
+            var tempClass = isAlert ? "temp-alert" : "temp-normal";
+            var markerContent = `
+                <div class="truck-marker">
+                    <div class="truck-icon">🚚</div>
+                    <div>订单: ${orderId}</div>
+                    <div class="${tempClass}">${temp} ℃ ${isAlert ? '(异常)' : ''}</div>
+                </div>
+            `;
+
+            if (truckMarkers[orderId]) {
+                // 车辆已存在，平滑移动位置并更新内容
+                var marker = truckMarkers[orderId];
+                marker.setContent(markerContent);
+                // 使用高德地图的平滑移动动画
+                marker.moveTo([lng, lat], {
+                    duration: 1000,
+                    autoRotation: true
+                });
+            } else {
+                // 新车辆，创建 Marker
+                var marker = new AMap.Marker({
+                    position: [lng, lat],
+                    content: markerContent,
+                    offset: new AMap.Pixel(-50, -50) // 偏移量，使图标居中指向坐标
+                });
+                marker.setMap(map);
+                truckMarkers[orderId] = marker;
+                
+                // 视角自适应
+                map.setFitView([marker]);
+            }
+        } catch (e) {
+            console.error("解析车辆数据失败: ", e);
+        }
+    }
+
+    // 用于测试的临时函数（可删除）
+    function simulateMove() {
+        var testJson = {
+            "order_id": "ORD_TEST_001",
+            "location": { "longitude": 116.407 + Math.random()*0.1, "latitude": 39.904 + Math.random()*0.1 },
+            "cargo_status": { "current_temp": (4.0 + Math.random()).toFixed(1), "is_alert": Math.random() > 0.8 }
+        };
+        updateTruckData(JSON.stringify(testJson));
+    }
+</script>
+</body>
+</html>
