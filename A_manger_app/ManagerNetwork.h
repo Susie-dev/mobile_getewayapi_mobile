@@ -18,10 +18,12 @@ public:
 
     Q_INVOKABLE void connectToServer();
     Q_INVOKABLE void disconnectFromServer();
+    Q_INVOKABLE void requestOrderHistory(const QString &orderId);
 
 signals:
     void connectionStatusChanged();
     void truckDataReceived(const QString &jsonString);
+    void historyDataReceived(const QString &jsonString);
 
 private slots:
     void onConnected();

@@ -53,6 +53,97 @@
 
     // 存储所有车辆的 Marker (key 为 order_id)
     var truckMarkers = {};
+    var playbackPolylines = {}; // 存储历史轨迹的红线
+
+    // QML 调用的 JavaScript 接口：播放历史轨迹
+    function playHistory(jsonStr) {
+        try {
+            var response = JSON.parse(jsonStr);
+            var orderId = response.order_id;
+            var dataArr = response.data;
+
+            if (!dataArr || dataArr.length === 0) {
+                alert("未查询到该订单的历史轨迹！");
+                return;
+            }
+
+            // 1. 提取所有经纬度点，并绘制红线
+            var path = [];
+            for (var i = 0; i < dataArr.length; i++) {
+                path.push([dataArr[i].longitude, dataArr[i].latitude]);
+            }
+
+            // 如果之前有画过这条线，先清除
+            if (playbackPolylines[orderId]) {
+                map.remove(playbackPolylines[orderId]);
+            }
+
+            var polyline = new AMap.Polyline({
+                path: path,
+                isOutline: true,
+                outlineColor: '#ffeeff',
+                borderWeight: 2,
+                strokeColor: "#ff0000", 
+                strokeOpacity: 0.8,
+                strokeWeight: 6,
+                strokeStyle: "solid",
+                lineJoin: 'round',
+                lineCap: 'round',
+                zIndex: 50,
+            });
+            polyline.setMap(map);
+            playbackPolylines[orderId] = polyline;
+
+            // 2. 视角自适应到轨迹范围
+            map.setFitView([polyline]);
+
+            // 3. 创建一个小车沿着红线跑
+            // 为了不和实时车辆冲突，我们在回放时创建一个专属的幽灵车
+            var markerContent = `
+                <div class="truck-marker">
+                    <div class="truck-icon">🚚</div>
+                    <div>回放: ${orderId}</div>
+                    <div style="color:#ff0000; font-weight:bold;">历史轨迹重现</div>
+                </div>
+            `;
+            
+            var playbackMarker = new AMap.Marker({
+                map: map,
+                position: path[0],
+                content: markerContent,
+                offset: new AMap.Pixel(-50, -50),
+                autoRotation: true
+            });
+
+            // 使用高德提供的轨迹回放动画 (需要引入 AMap.MoveAnimation 插件，但高德2.0自带 moveTo)
+            // 我们通过递归调用 moveTo 实现连贯的动画
+            var currentIndex = 0;
+            function moveNext() {
+                if (currentIndex >= path.length - 1) {
+                    // 跑完了，两秒后销毁幽灵车
+                    setTimeout(function() { map.remove(playbackMarker); }, 2000);
+                    return;
+                }
+                currentIndex++;
+                var nextPos = path[currentIndex];
+                playbackMarker.moveTo(nextPos, {
+                    duration: 500, // 每段路0.5秒
+                    autoRotation: true
+                });
+                
+                // 监听移动完成事件，继续跑下一段
+                playbackMarker.on('moveend', function() {
+                    playbackMarker.off('moveend'); // 移除监听防止重复触发
+                    moveNext();
+                });
+            }
+            
+            moveNext();
+
+        } catch (e) {
+            console.error("解析历史数据失败: ", e);
+        }
+    }
 
     // 2. QML 调用的 JavaScript 接口：更新车辆位置和状态
     // jsonStr 是从后端传来的标准 JSON 字符串

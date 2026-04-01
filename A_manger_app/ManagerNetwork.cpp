@@ -1,5 +1,7 @@
 #include "ManagerNetwork.h"
 #include <QDebug>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 ManagerNetwork::ManagerNetwork(QObject *parent)
     : QObject(parent), m_tcpSocket(new QTcpSocket(this)), m_connectionStatus("未连接")
@@ -54,6 +56,25 @@ void ManagerNetwork::onDisconnected()
     qDebug() << "Manager disconnected from server.";
 }
 
+void ManagerNetwork::requestOrderHistory(const QString &orderId)
+{
+    if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
+        QJsonObject reqObj;
+        reqObj["action"] = "query_history";
+        reqObj["order_id"] = orderId;
+        
+        QJsonDocument doc(reqObj);
+        QByteArray payload = doc.toJson(QJsonDocument::Compact);
+        payload.append('\n');
+        
+        m_tcpSocket->write(payload);
+        m_tcpSocket->flush();
+        qDebug() << "Manager sent query_history request for order:" << orderId;
+    } else {
+        qDebug() << "Manager is not connected. Cannot send query request.";
+    }
+}
+
 void ManagerNetwork::onReadyRead()
 {
     // 读取所有可用的数据
@@ -62,6 +83,19 @@ void ManagerNetwork::onReadyRead()
         QByteArray line = m_tcpSocket->readLine().trimmed();
         if (!line.isEmpty()) {
             QString jsonString = QString::fromUtf8(line);
+            
+            // 解析判断是历史数据还是实时数据
+            QJsonParseError error;
+            QJsonDocument doc = QJsonDocument::fromJson(line, &error);
+            if (error.error == QJsonParseError::NoError && doc.isObject()) {
+                QJsonObject obj = doc.object();
+                if (obj.contains("type") && obj["type"].toString() == "history_response") {
+                    emit historyDataReceived(jsonString);
+                    continue;
+                }
+            }
+            
+            // 否则当作普通的实时车辆数据
             emit truckDataReceived(jsonString);
         }
     }

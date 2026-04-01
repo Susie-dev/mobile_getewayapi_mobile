@@ -52,8 +52,8 @@ Item {
             }
 
             onClicked: {
-                // 模拟登录成功，跳转到任务列表
-                stackView.push("OrderListPage.qml")
+                // 模拟登录成功，跳转到创建订单页
+                stackView.push("CreateOrderPage.qml")
             }
         }
     }

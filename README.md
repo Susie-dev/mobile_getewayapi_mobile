@@ -30,6 +30,7 @@
 ### 1. 后端环境 (RelayServer)
 * **操作系统**：Linux (推荐 Ubuntu 20.04/22.04) 或 Windows 下的 WSL/Git Bash。
 * **编译器**：GCC/G++ 4.8 及以上版本（需完全支持 C++11 标准）。
+* **数据库**：MySQL 5.7+ (需安装 `libmysqlclient-dev`)。
 * **构建工具**：Make。
 
 ### 2. 客户端/管理端环境 (Qt Apps)
@@ -39,23 +40,37 @@
   * `Qt Quick` / `Qt QML`
   * `Qt Network`
   * `Qt Sql`
-  * `Qt WebEngine` (注意：WebEngine 模块在某些轻量级安装包中不默认提供，需手动勾选，且在 Android 编译时不可用，**管理端必须编译为桌面版**)。
+  * `Qt WebEngine` (仅管理端需要)
+  * `Qt Positioning` (仅司机端需要，用于获取真实硬件 GPS)
 
 ---
 
-## 🚀 三、 程序的编译与启动方法
+## 🚀 三、 数据库配置与启动教程
 
-### 步骤 1：启动 Reactor 中转服务器
-1. 打开 Linux/WSL 终端，进入项目根目录（即 `makefile` 所在目录）。
+### 步骤 1：准备 MySQL 数据库
+本项目使用 MySQL 进行数据的持久化存储，启动前请务必配置好数据库。
+1. 在 Linux/WSL 中安装 MySQL：
+   ```bash
+   sudo apt update
+   sudo apt install mysql-server libmysqlclient-dev
+   ```
+2. 登录 MySQL 并创建业务数据库：
+   ```sql
+   CREATE DATABASE cold_chain_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+3. **注意**：程序默认使用 `root` 用户和 `123456` 密码连接。如果您的本地配置不同，请在 `relay_main.cpp` 中修改 `DatabaseHelper::getInstance().connect()` 的参数。程序启动时会自动创建 `orders` 和 `transport_logs` 表。
+
+### 步骤 2：启动 Reactor 中转服务器
+1. 打开 Linux/WSL 终端，进入项目根目录。
 2. 执行编译命令：
    ```bash
    make relay_server
    ```
-3. 启动服务器，指定监听的 IP 和端口（本例使用本机测试）：
+3. 启动服务器，指定监听的 IP 和端口：
    ```bash
    ./relay_server 127.0.0.1 8888
    ```
-   *启动成功后，终端会打印出 Worker 线程初始化的日志。*
+   *启动成功后，终端会打印出 MySQL 连接成功以及表结构初始化的日志。*
 
 ### 步骤 2：启动 管理员监控大屏 (`A_manger_app`)
 1. 使用 Qt Creator 打开 `A_manger_app` 目录下的 `CMakeLists.txt`。
@@ -63,15 +78,19 @@
 3. 点击左下角的绿色 **Run (运行)** 按钮。
 4. 程序启动后，会自动尝试连接 `127.0.0.1:8888`，右上角状态会变为“已连接到服务器”。
 
-### 步骤 3：启动 司机采集端 (`A_client_app`)
+### 步骤 4：启动 司机采集端 (`A_client_app`)
 1. 使用 Qt Creator 打开 `A_client_app` 目录下的 `CMakeLists.txt`。
 2. 配置构建套件：选择 Desktop 版套件进行本机调试。
-3. 点击 **Run (运行)** 按钮。
-4. **操作流程**：
+3. **【重要】API 密钥配置**：本项目使用了智谱大模型(GLM-4)根据真实坐标生成天气与环境数据。请在 `A_client_app/LLMService.h` 中配置您的智谱 API Key。
+4. 点击 **Run (运行)** 按钮。
+5. **操作流程**：
    * 在登录页点击“登录”。
-   * 在任务大厅点击任意一个处于“待接单”状态的订单（如：海南草莓），点击“接单并装车”。
-   * 进入运输监控页后，点击“开始运输”。
-5. **见证奇迹**：此时返回去看**管理员大屏**，地图上会出现一辆小货车开始移动，并在“全网订单大盘”页面中，对应订单的状态会实时跳动更新！
+   * 在“创建新订单”页面，输入货物名称（如：烟台苹果）和目标温度，点击“生成订单并开始运输”。
+   * 程序将调用系统定位模块获取真实 GPS 坐标，并每隔一分钟向大模型发送 Prompt 请求。
+6. **见证奇迹**：
+   * 司机端屏幕上将每分钟打印出带有真实天气、经纬度以及 AI 生成的波动的温度 JSON 数据。
+   * 同时，这段数据会被发送到后端永久存入 MySQL。
+   * **管理员大屏**的地图上会出现一辆小货车开始移动，并在“全网订单大盘”页面中，对应订单的状态会实时跳动更新！
 
 ---
 

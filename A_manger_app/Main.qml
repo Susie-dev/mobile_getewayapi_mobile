@@ -12,10 +12,15 @@ Window {
     ManagerNetwork {
         id: network
         onTruckDataReceived: function(jsonString) {
-            // 将数据传递给地图大屏
+            // 将实时数据传递给地图大屏
             mapDashboard.updateTruckOnMap(jsonString);
-            // 将数据传递给订单大盘更新状态
+            // 将实时数据传递给订单大盘更新状态
             orderListPage.updateOrderData(jsonString);
+        }
+        onHistoryDataReceived: function(jsonString) {
+            // 收到历史数据，强制切换到地图页并播放轨迹
+            tabBar.currentIndex = 0;
+            mapDashboard.playHistoryOnMap(jsonString);
         }
     }
 

@@ -19,6 +19,16 @@ Item {
         }
     }
 
+    // 播放历史轨迹
+    function playHistoryOnMap(jsonString) {
+        let safeJson = jsonString.replace(/'/g, "\\'");
+        let script = "playHistory('" + safeJson + "');";
+        mapView.runJavaScript(script);
+        
+        let data = JSON.parse(jsonString);
+        alertLogArea.text = `[系统] 正在回放订单 ${data.order_id} 的历史轨迹，共包含 ${data.data.length} 个节点。\n` + alertLogArea.text;
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0

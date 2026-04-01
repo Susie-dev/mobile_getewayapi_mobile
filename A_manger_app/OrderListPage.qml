@@ -86,6 +86,15 @@ Item {
                                 font.pixelSize: 16
                             }
                             Text { text: "实时温度: " + model.temp; color: "#1976d2" }
+                            
+                            Button {
+                                text: "查看历史轨迹"
+                                Layout.topMargin: 5
+                                onClicked: {
+                                    // 向后端发送查询请求
+                                    network.requestOrderHistory(model.orderNo);
+                                }
+                            }
                         }
                     }
                 }
