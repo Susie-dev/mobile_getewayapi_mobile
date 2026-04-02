@@ -6,43 +6,122 @@ import ClientApp 1.0
 Item {
     id: root
 
+    // 顶部背景
+    Rectangle {
+        id: headerBg
+        width: parent.width
+        height: 180
+        color: "#1976d2"
+        radius: 0
+        
+        // 底部圆角效果
+        Rectangle {
+            width: parent.width
+            height: 30
+            color: parent.color
+            anchors.bottom: parent.bottom
+        }
+    }
+
     ColumnLayout {
-        anchors.centerIn: parent
-        width: parent.width * 0.8
-        spacing: 30
+        anchors.fill: parent
+        anchors.margins: 20
+        spacing: 20
 
         Text {
-            text: "创建新订单"
-            font.pixelSize: 28
+            text: "创建运输订单"
+            font.pixelSize: 32
             font.bold: true
-            Layout.alignment: Qt.AlignHCenter
-            color: "#1a237e"
+            font.family: "Microsoft YaHei"
+            color: "white"
+            Layout.topMargin: 30
+            Layout.bottomMargin: 40
         }
 
-        TextField {
-            id: goodsInput
+        // 表单卡片
+        Rectangle {
             Layout.fillWidth: true
-            placeholderText: "请输入货物名称 (如: 苹果)"
-            font.pixelSize: 18
+            Layout.preferredHeight: 280
+            radius: 12
+            color: "white"
+            
+            // 简单阴影
+            layer.enabled: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 25
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    
+                    Text {
+                        text: "货物信息"
+                        font.pixelSize: 14
+                        color: "#666"
+                        font.bold: true
+                    }
+                    
+                    TextField {
+                        id: goodsInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        placeholderText: "请输入货物名称 (如: 烟台苹果)"
+                        font.pixelSize: 16
+                        background: Rectangle {
+                            color: "#f5f5f5"
+                            radius: 8
+                            border.width: 0
+                        }
+                        leftPadding: 15
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    
+                    Text {
+                        text: "目标温控要求 (℃)"
+                        font.pixelSize: 14
+                        color: "#666"
+                        font.bold: true
+                    }
+                    
+                    TextField {
+                        id: tempInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        placeholderText: "例如: 4.0"
+                        font.pixelSize: 16
+                        validator: DoubleValidator { bottom: -30.0; top: 30.0 }
+                        background: Rectangle {
+                            color: "#f5f5f5"
+                            radius: 8
+                            border.width: 0
+                        }
+                        leftPadding: 15
+                    }
+                }
+            }
         }
 
-        TextField {
-            id: tempInput
-            Layout.fillWidth: true
-            placeholderText: "目标温度要求 (如: 4.0)"
-            font.pixelSize: 18
-            validator: DoubleValidator { bottom: -30.0; top: 30.0 }
+        Item {
+            Layout.fillHeight: true // 占位把按钮推到底部
         }
 
         Button {
             text: "生成订单并开始运输"
             Layout.fillWidth: true
-            Layout.preferredHeight: 50
-            font.pixelSize: 18
+            Layout.preferredHeight: 55
+            Layout.bottomMargin: 20
             
             background: Rectangle {
-                color: "#4caf50"
-                radius: 5
+                color: parent.pressed ? "#388e3c" : "#4caf50"
+                radius: 8
+                layer.enabled: true
             }
             contentItem: Text {
                 text: parent.text
@@ -50,27 +129,27 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.bold: true
+                font.pixelSize: 18
+                font.letterSpacing: 1
             }
 
             onClicked: {
                 if (goodsInput.text === "") {
+                    // 简单提示
+                    goodsInput.placeholderText = "名称不能为空！"
+                    goodsInput.placeholderTextColor = "red"
                     return;
                 }
                 
-                // 1. 随机生成唯一的订单号: ORD_时间戳_随机数
                 let timestamp = new Date().getTime();
                 let randomNum = Math.floor(Math.random() * 1000);
                 let newOrderNo = "ORD_" + timestamp + "_" + randomNum;
                 
                 let targetTemp = parseFloat(tempInput.text);
                 if (isNaN(targetTemp)) {
-                    targetTemp = 4.0; // 默认 4.0 度
+                    targetTemp = 4.0;
                 }
 
-                // 2. 将数据存入本地 SQLite (未来可以加入货主信息等)
-                // (此处为了演示流畅，我们直接把参数传给下一个页面)
-
-                // 3. 跳转到运输监控页面
                 stackView.push("TransportPage.qml", { 
                     "currentOrderNo": newOrderNo,
                     "goodsName": goodsInput.text,

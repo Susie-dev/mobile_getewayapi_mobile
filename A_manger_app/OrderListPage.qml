@@ -35,65 +35,139 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 15
+        anchors.margins: 30
+        spacing: 20
 
-        Text {
-            text: "全网订单数据大盘"
-            font.pixelSize: 24
-            font.bold: true
-            color: "#333"
+        RowLayout {
+            spacing: 15
+            Text {
+                text: "📋"
+                font.pixelSize: 28
+            }
+            Text {
+                text: "全网订单数据大盘"
+                font.pixelSize: 28
+                font.bold: true
+                font.family: "Microsoft YaHei"
+                color: "#ccd6f6"
+            }
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "white"
-            radius: 8
-            border.color: "#e0e0e0"
+            color: "#112240"
+            radius: 12
+            border.color: "#233554"
+            border.width: 1
+            
+            layer.enabled: true
 
             ListView {
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: 20
                 model: orderModel
-                spacing: 10
+                spacing: 15
                 clip: true
 
                 delegate: Rectangle {
                     width: ListView.view.width
-                    height: 80
-                    color: "#f8f9fa"
-                    radius: 5
-                    border.color: "#e0e0e0"
+                    height: 90
+                    color: "#0a192f"
+                    radius: 8
+                    border.color: "#233554"
+                    border.width: 1
+                    
+                    // 鼠标悬停高亮
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: parent.border.color = "#64ffda"
+                        onExited: parent.border.color = "#233554"
+                        propagateComposedEvents: true // 允许底层按钮接收点击
+                    }
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 15
+                        anchors.margins: 20
                         spacing: 20
+
+                        Rectangle {
+                            width: 50
+                            height: 50
+                            radius: 25
+                            color: "#1d2d50"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "📦"
+                                font.pixelSize: 24
+                            }
+                        }
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            Text { text: "订单号: " + model.orderNo; font.bold: true; font.pixelSize: 16 }
-                            Text { text: "货物: " + model.goods; color: "#555" }
+                            spacing: 5
+                            Text { 
+                                text: model.orderNo
+                                font.bold: true
+                                font.pixelSize: 18
+                                font.family: "Courier"
+                                color: "#ccd6f6"
+                            }
+                            Text { 
+                                text: model.goods
+                                color: "#8892b0"
+                                font.pixelSize: 14
+                            }
                         }
 
                         ColumnLayout {
                             Layout.alignment: Qt.AlignRight
-                            Text { 
-                                text: model.status 
-                                color: model.status === "运输中" ? "#4caf50" : "#ff9800"
-                                font.bold: true
-                                font.pixelSize: 16
-                            }
-                            Text { text: "实时温度: " + model.temp; color: "#1976d2" }
+                            spacing: 5
                             
-                            Button {
-                                text: "查看历史轨迹"
-                                Layout.topMargin: 5
-                                onClicked: {
-                                    // 向后端发送查询请求
-                                    network.requestOrderHistory(model.orderNo);
+                            RowLayout {
+                                Layout.alignment: Qt.AlignRight
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: model.status === "运输中" ? "#00e676" : "#ffb300"
                                 }
+                                Text { 
+                                    text: model.status 
+                                    color: model.status === "运输中" ? "#00e676" : "#ffb300"
+                                    font.bold: true
+                                    font.pixelSize: 16
+                                }
+                            }
+                            
+                            Text { 
+                                text: "实时温度: " + model.temp
+                                color: model.temp.indexOf("异常") !== -1 ? "#ff1744" : "#64ffda"
+                                font.pixelSize: 14
+                                font.family: "Courier"
+                                Layout.alignment: Qt.AlignRight
+                            }
+                        }
+                        
+                        Button {
+                            text: "▶ 回放轨迹"
+                            Layout.leftMargin: 20
+                            background: Rectangle {
+                                color: parent.pressed ? "#112240" : "transparent"
+                                border.color: "#64ffda"
+                                border.width: 1
+                                radius: 4
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: "#64ffda"
+                                font.pixelSize: 14
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            onClicked: {
+                                network.requestOrderHistory(model.orderNo);
                             }
                         }
                     }

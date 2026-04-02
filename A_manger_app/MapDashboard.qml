@@ -33,24 +33,46 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // 左侧面板
+        // 左侧面板 (科技感大屏风格)
         Rectangle {
-            Layout.preferredWidth: 300
+            Layout.preferredWidth: 320
             Layout.fillHeight: true
-            color: "#f5f5f5"
-            border.color: "#e0e0e0"
-            border.width: 1
+            color: "#112240"
+            
+            // 右侧发光边框
+            Rectangle {
+                width: 1
+                height: parent.height
+                color: "#64ffda"
+                opacity: 0.3
+                anchors.right: parent.right
+            }
             z: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 15
-                spacing: 10
+                anchors.margins: 20
+                spacing: 15
 
-                Text {
-                    text: "实时警报信息"
-                    font.pixelSize: 18
-                    font.bold: true
+                RowLayout {
+                    spacing: 8
+                    Text {
+                        text: "🚨"
+                        font.pixelSize: 20
+                    }
+                    Text {
+                        text: "实时警报面板"
+                        font.pixelSize: 18
+                        font.bold: true
+                        font.family: "Microsoft YaHei"
+                        color: "#ccd6f6"
+                    }
+                }
+                
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: "#233554"
                 }
 
                 ScrollView {
@@ -60,8 +82,12 @@ Item {
                     TextArea {
                         id: alertLogArea
                         readOnly: true
-                        text: "暂无警报..."
+                        text: "暂无警报，全网运行平稳..."
+                        color: "#64ffda"
+                        font.family: "Courier"
+                        font.pixelSize: 13
                         wrapMode: Text.WrapAnywhere
+                        background: Rectangle { color: "transparent" }
                     }
                 }
             }
@@ -71,10 +97,12 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            color: "#0a192f"
             
             WebEngineView {
                 id: mapView
                 anchors.fill: parent
+                anchors.margins: 10 // 留出一点边距，有大屏模块感
                 url: "qrc:/qt/qml/ManagerApp/map.html"
             }
         }
