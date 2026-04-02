@@ -23,8 +23,11 @@ private slots:
     void onReplyFinished(QNetworkReply *reply);
 
 private:
+    void generateFallbackData();
+
     QNetworkAccessManager *m_networkManager;
     const QString m_apiKey = "0cbb811830384d32baa6f762a1919871.EZ1Xih3Gl2TH2HUU"; // 您提供的 API Key
+    double m_lastTargetTemp = 0.0;
 };
 
 #endif // LLMSERVICE_H

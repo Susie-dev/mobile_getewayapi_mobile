@@ -1,6 +1,7 @@
 #include "RelayServer.h"
 #include "DatabaseHelper.h"
 #include <iostream>
+#include <cstdlib>
 #include <signal.h>
 
 RelayServer *relay;               
@@ -27,8 +28,13 @@ int main(int argc, char *argv[])
   signal(SIGTERM, Stop); 
   signal(SIGINT, Stop); 
 
-  // 初始化 MySQL 连接 (请根据您的实际环境修改用户名和密码)
-  if (!DatabaseHelper::getInstance().connect("127.0.0.1", "root", "123456", "cold_chain_db", 3306)) {
+  // 初始化 MySQL 连接 (支持通过环境变量配置 HOST)
+  const char* dbHost = getenv("MYSQL_HOST");
+  if (dbHost == nullptr) {
+      dbHost = "127.0.0.1";
+  }
+  
+  if (!DatabaseHelper::getInstance().connect(dbHost, "root", "123456", "cold_chain_db", 3306)) {
       std::cerr << "Failed to connect to database. Server will start without persistence." << std::endl;
   } else {
       DatabaseHelper::getInstance().initTables();

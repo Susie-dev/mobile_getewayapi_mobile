@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: cold_chain_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: '123456'
+      MYSQL_DATABASE: 'cold_chain_db'
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  relay_server:
+    build: .
+    container_name: cold_chain_relay
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - MYSQL_HOST=db
+    ports:
+      - "8888:8888"
+    # Delay start to ensure MySQL is ready
+    command: >
+      bash -c "sleep 10 && ./relay_server 0.0.0.0 8888"
+
+volumes:
+  db_data:

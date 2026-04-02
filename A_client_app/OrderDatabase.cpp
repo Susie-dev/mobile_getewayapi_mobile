@@ -41,8 +41,50 @@ bool OrderDatabase::initDatabase()
         return false;
     }
     
+    // 创建离线缓存表
+    success = query.exec("CREATE TABLE IF NOT EXISTS offline_logs ("
+                         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                         "json_data TEXT)");
+    if (!success) {
+        qDebug() << "Create offline_logs table failed:" << query.lastError();
+        return false;
+    }
+    
     qDebug() << "Database initialized successfully.";
     return true;
+}
+
+bool OrderDatabase::insertOfflineLog(const QByteArray &jsonData)
+{
+    if (!m_db.isOpen()) return false;
+    QSqlQuery query;
+    query.prepare("INSERT INTO offline_logs (json_data) VALUES (?)");
+    query.addBindValue(QString::fromUtf8(jsonData));
+    if (!query.exec()) {
+        qDebug() << "Failed to insert offline log:" << query.lastError();
+        return false;
+    }
+    qDebug() << "Saved log to offline cache.";
+    return true;
+}
+
+QList<QByteArray> OrderDatabase::getAndClearOfflineLogs()
+{
+    QList<QByteArray> logs;
+    if (!m_db.isOpen()) return logs;
+
+    QSqlQuery query;
+    query.exec("SELECT json_data FROM offline_logs ORDER BY id ASC");
+    while (query.next()) {
+        logs.append(query.value(0).toString().toUtf8());
+    }
+
+    if (!logs.isEmpty()) {
+        query.exec("DELETE FROM offline_logs");
+        qDebug() << "Cleared offline logs after reading.";
+    }
+
+    return logs;
 }
 
 void OrderDatabase::insertMockData()

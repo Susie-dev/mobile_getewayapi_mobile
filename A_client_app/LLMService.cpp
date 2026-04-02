@@ -13,6 +13,8 @@ LLMService::LLMService(QObject *parent) : QObject(parent)
 
 void LLMService::fetchEnvironmentData(double longitude, double latitude, double targetTemp)
 {
+    m_lastTargetTemp = targetTemp;
+
     // 智谱 API (GLM-4) 的端点
     QUrl url("https://open.bigmodel.cn/api/paas/v4/chat/completions");
     QNetworkRequest request(url);
@@ -85,15 +87,41 @@ void LLMService::onReplyFinished(QNetworkReply *reply)
                     qDebug() << "Successfully parsed GLM generated data:" << weather << currentTemp << "Alert:" << isAlert;
                     
                     emit dataReceived(weather, humidity, currentTemp, isAlert);
+                    reply->deleteLater();
+                    return;
                 } else {
-                    emit errorOccurred("Failed to parse GLM JSON output: " + jsonError.errorString());
-                    qDebug() << "GLM Content was:" << content;
+                    qDebug() << "Failed to parse GLM JSON output, Content was:" << content;
                 }
             }
         }
     } else {
-        emit errorOccurred("Network Error: " + reply->errorString());
         qDebug() << "GLM API Request failed:" << reply->errorString() << reply->readAll();
     }
+    
+    // 如果走到这里，说明网络请求失败或解析失败，触发降级策略
+    qDebug() << "[LLMService] API failed, using fallback strategy...";
+    generateFallbackData();
     reply->deleteLater();
+}
+
+void LLMService::generateFallbackData()
+{
+    // 降级策略：本地算法模拟温湿度
+    QString weather = "多云 (离线模拟)";
+    QString humidity = "60%";
+    
+    // 模拟温度：在目标温度上下波动 1.5 度
+    double offset = ((qrand() % 30) - 15) / 10.0;
+    double currentTemp = m_lastTargetTemp + offset;
+    
+    // 5% 概率模拟故障
+    bool isAlert = false;
+    if ((qrand() % 100) < 5) {
+        currentTemp += 10.0;
+        isAlert = true;
+    } else if (qAbs(currentTemp - m_lastTargetTemp) > 5.0) {
+        isAlert = true;
+    }
+    
+    emit dataReceived(weather, humidity, currentTemp, isAlert);
 }

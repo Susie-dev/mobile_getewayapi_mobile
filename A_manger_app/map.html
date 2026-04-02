@@ -36,12 +36,48 @@
         @keyframes blink {
             50% { opacity: 0; }
         }
+        
+        /* 告警弹窗样式 */
+        #alert-box {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 999;
+            animation: blink 1s infinite;
+        }
+
+        /* ECharts 图表容器 */
+        #chart-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            height: 250px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 100;
+            padding: 10px;
+        }
     </style>
     <!-- 请注意：这里的 key 是一把测试 key，实际商用请替换为您自己在高德开放平台申请的 Web端(JS API) Key -->
     <script src="https://webapi.amap.com/maps?v=2.0&key=62f5f142271df07d10e53a31c510db9f"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 </head>
 <body>
 <div id="container"></div>
+<div id="alert-box">⚠️ 发现温度异常订单！</div>
+<div id="chart-container"></div>
 
 <script>
     // 1. 初始化地图，中心点设为北京
@@ -140,6 +176,62 @@
             
             moveNext();
 
+            // 4. 渲染 ECharts 温度折线图
+            var chartDom = document.getElementById('chart-container');
+            chartDom.style.display = 'block';
+            var myChart = echarts.init(chartDom);
+            
+            var timeData = [];
+            var tempData = [];
+            for (var i = 0; i < dataArr.length; i++) {
+                // 将秒级时间戳转为 HH:mm 格式
+                var date = new Date(dataArr[i].timestamp * 1000);
+                var timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+                timeData.push(timeStr);
+                tempData.push(dataArr[i].current_temp);
+            }
+
+            var option = {
+                title: {
+                    text: orderId + ' 运输温度曲线',
+                    textStyle: { fontSize: 14 }
+                },
+                tooltip: {
+                    trigger: 'axis'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: timeData,
+                    boundaryGap: false
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '温度 (℃)',
+                    axisLabel: { formatter: '{value} °C' }
+                },
+                series: [
+                    {
+                        name: '车厢温度',
+                        type: 'line',
+                        data: tempData,
+                        smooth: true,
+                        markLine: {
+                            data: [
+                                { type: 'average', name: 'Avg' }
+                            ]
+                        },
+                        itemStyle: { color: '#ff7300' },
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: 'rgba(255, 115, 0, 0.5)' },
+                                { offset: 1, color: 'rgba(255, 115, 0, 0.1)' }
+                            ])
+                        }
+                    }
+                ]
+            };
+            myChart.setOption(option);
+
         } catch (e) {
             console.error("解析历史数据失败: ", e);
         }
@@ -187,6 +279,17 @@
                 
                 // 视角自适应
                 map.setFitView([marker]);
+            }
+
+            // 触发全局异常告警
+            if (isAlert) {
+                var alertBox = document.getElementById('alert-box');
+                alertBox.innerText = '⚠️ 发现温度异常！订单: ' + orderId;
+                alertBox.style.display = 'block';
+                // 5 秒后自动隐藏
+                setTimeout(function() {
+                    alertBox.style.display = 'none';
+                }, 5000);
             }
         } catch (e) {
             console.error("解析车辆数据失败: ", e);

@@ -2,7 +2,7 @@
 #include <iostream>
 #include <sstream>
 
-DatabaseHelper::DatabaseHelper() : m_mysql(nullptr), m_isConnected(false) {
+DatabaseHelper::DatabaseHelper() : m_isConnected(false), m_poolSize(10) {
 }
 
 DatabaseHelper::~DatabaseHelper() {
@@ -10,44 +10,84 @@ DatabaseHelper::~DatabaseHelper() {
 }
 
 bool DatabaseHelper::connect(const std::string& host, const std::string& user, 
-                             const std::string& passwd, const std::string& db_name, int port) {
+                             const std::string& passwd, const std::string& db_name, int port, int pool_size) {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_isConnected) return true;
 
-    m_mysql = mysql_init(nullptr);
-    if (!m_mysql) {
-        std::cerr << "MySQL initialization failed!" << std::endl;
+    m_host = host;
+    m_user = user;
+    m_passwd = passwd;
+    m_db_name = db_name;
+    m_port = port;
+    m_poolSize = pool_size;
+
+    for (int i = 0; i < m_poolSize; ++i) {
+        MYSQL* conn = mysql_init(nullptr);
+        if (!conn) {
+            std::cerr << "MySQL initialization failed for connection " << i << std::endl;
+            continue;
+        }
+
+        if (!mysql_real_connect(conn, m_host.c_str(), m_user.c_str(), m_passwd.c_str(), 
+                                m_db_name.c_str(), m_port, nullptr, 0)) {
+            std::cerr << "MySQL connection failed: " << mysql_error(conn) << std::endl;
+            mysql_close(conn);
+            continue;
+        }
+
+        mysql_set_character_set(conn, "utf8mb4");
+        m_pool.push(conn);
+    }
+
+    if (m_pool.empty()) {
+        std::cerr << "Failed to create any database connections for the pool." << std::endl;
         return false;
     }
 
-    if (!mysql_real_connect(m_mysql, host.c_str(), user.c_str(), passwd.c_str(), 
-                            db_name.c_str(), port, nullptr, 0)) {
-        std::cerr << "MySQL connection failed: " << mysql_error(m_mysql) << std::endl;
-        mysql_close(m_mysql);
-        m_mysql = nullptr;
-        return false;
-    }
-
-    // 设置字符集为 utf8mb4，防止中文乱码
-    mysql_set_character_set(m_mysql, "utf8mb4");
     m_isConnected = true;
-    std::cout << "MySQL connected successfully to " << db_name << std::endl;
+    std::cout << "MySQL connected successfully to " << db_name << " with pool size " << m_pool.size() << std::endl;
     return true;
 }
 
 void DatabaseHelper::disconnect() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_isConnected && m_mysql) {
-        mysql_close(m_mysql);
-        m_mysql = nullptr;
-        m_isConnected = false;
-        std::cout << "MySQL disconnected." << std::endl;
+    if (!m_isConnected) return;
+
+    while (!m_pool.empty()) {
+        MYSQL* conn = m_pool.front();
+        m_pool.pop();
+        if (conn) {
+            mysql_close(conn);
+        }
     }
+    m_isConnected = false;
+    std::cout << "MySQL disconnected and connection pool cleared." << std::endl;
+}
+
+MYSQL* DatabaseHelper::getConnection() {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    while (m_pool.empty()) {
+        if (!m_isConnected) return nullptr;
+        m_cond.wait(lock);
+    }
+    MYSQL* conn = m_pool.front();
+    m_pool.pop();
+    return conn;
+}
+
+void DatabaseHelper::releaseConnection(MYSQL* conn) {
+    if (!conn) return;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_pool.push(conn);
+    m_cond.notify_one();
 }
 
 bool DatabaseHelper::initTables() {
-    std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_isConnected) return false;
+    MYSQL* conn = getConnection();
+    if (!conn) return false;
+
+    bool success = true;
 
     // 1. 创建订单概览表
     const char* create_orders_table = 
@@ -58,9 +98,9 @@ bool DatabaseHelper::initTables() {
         "status VARCHAR(32) DEFAULT 'IN_TRANSIT'"
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
         
-    if (mysql_query(m_mysql, create_orders_table)) {
-        std::cerr << "Failed to create orders table: " << mysql_error(m_mysql) << std::endl;
-        return false;
+    if (mysql_query(conn, create_orders_table)) {
+        std::cerr << "Failed to create orders table: " << mysql_error(conn) << std::endl;
+        success = false;
     }
 
     // 2. 创建历史轨迹与环境日志表
@@ -76,38 +116,45 @@ bool DatabaseHelper::initTables() {
         "target_temp DOUBLE, "
         "current_temp DOUBLE, "
         "is_alert INT DEFAULT 0, "
-        "INDEX idx_order (order_id), " // 添加索引加快查询速度
+        "INDEX idx_order (order_id), "
         "FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE"
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
-    if (mysql_query(m_mysql, create_logs_table)) {
-        std::cerr << "Failed to create transport_logs table: " << mysql_error(m_mysql) << std::endl;
-        return false;
+    if (mysql_query(conn, create_logs_table)) {
+        std::cerr << "Failed to create transport_logs table: " << mysql_error(conn) << std::endl;
+        success = false;
     }
 
-    std::cout << "MySQL tables initialized successfully." << std::endl;
-    return true;
+    if (success) {
+        std::cout << "MySQL tables initialized successfully." << std::endl;
+    }
+    releaseConnection(conn);
+    return success;
 }
 
 bool DatabaseHelper::upsertOrder(const std::string& order_id, const std::string& goods_name) {
-    std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_isConnected) return false;
+    MYSQL* conn = getConnection();
+    if (!conn) return false;
 
-    // 使用 INSERT IGNORE 确保同一订单只插入一次开始时间
     long long current_time = time(nullptr);
     std::string query = "INSERT IGNORE INTO orders (order_id, goods_name, start_time, status) VALUES ('" + 
                         order_id + "', '" + goods_name + "', " + std::to_string(current_time) + ", 'IN_TRANSIT')";
     
-    if (mysql_query(m_mysql, query.c_str())) {
-        std::cerr << "Failed to upsert order: " << mysql_error(m_mysql) << std::endl;
-        return false;
+    bool success = true;
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "Failed to upsert order: " << mysql_error(conn) << std::endl;
+        success = false;
     }
-    return true;
+    
+    releaseConnection(conn);
+    return success;
 }
 
 bool DatabaseHelper::insertTransportLog(const TransportLog& log) {
-    std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_isConnected) return false;
+    MYSQL* conn = getConnection();
+    if (!conn) return false;
 
     std::stringstream ss;
     ss << "INSERT INTO transport_logs (order_id, timestamp, longitude, latitude, weather, humidity, target_temp, current_temp, is_alert) VALUES ('"
@@ -121,25 +168,33 @@ bool DatabaseHelper::insertTransportLog(const TransportLog& log) {
        << log.current_temp << ", "
        << log.is_alert << ")";
 
-    if (mysql_query(m_mysql, ss.str().c_str())) {
-        std::cerr << "Failed to insert log: " << mysql_error(m_mysql) << std::endl;
-        return false;
+    bool success = true;
+    if (mysql_query(conn, ss.str().c_str())) {
+        std::cerr << "Failed to insert log: " << mysql_error(conn) << std::endl;
+        success = false;
     }
-    return true;
+    
+    releaseConnection(conn);
+    return success;
 }
 
 std::vector<OrderOverview> DatabaseHelper::getAllOrders() {
     std::vector<OrderOverview> orders;
-    std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_isConnected) return orders;
+    MYSQL* conn = getConnection();
+    if (!conn) return orders;
 
-    if (mysql_query(m_mysql, "SELECT order_id, goods_name, start_time, status FROM orders ORDER BY start_time DESC")) {
-        std::cerr << "Failed to query orders: " << mysql_error(m_mysql) << std::endl;
+    if (mysql_query(conn, "SELECT order_id, goods_name, start_time, status FROM orders ORDER BY start_time DESC")) {
+        std::cerr << "Failed to query orders: " << mysql_error(conn) << std::endl;
+        releaseConnection(conn);
         return orders;
     }
 
-    MYSQL_RES* res = mysql_store_result(m_mysql);
-    if (!res) return orders;
+    MYSQL_RES* res = mysql_store_result(conn);
+    if (!res) {
+        releaseConnection(conn);
+        return orders;
+    }
 
     MYSQL_ROW row;
     while ((row = mysql_fetch_row(res))) {
@@ -151,24 +206,30 @@ std::vector<OrderOverview> DatabaseHelper::getAllOrders() {
         orders.push_back(order);
     }
     mysql_free_result(res);
+    releaseConnection(conn);
     return orders;
 }
 
 std::vector<TransportLog> DatabaseHelper::getOrderHistory(const std::string& order_id) {
     std::vector<TransportLog> logs;
-    std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_isConnected) return logs;
+    MYSQL* conn = getConnection();
+    if (!conn) return logs;
 
     std::string query = "SELECT timestamp, longitude, latitude, weather, humidity, target_temp, current_temp, is_alert "
                         "FROM transport_logs WHERE order_id = '" + order_id + "' ORDER BY timestamp ASC";
 
-    if (mysql_query(m_mysql, query.c_str())) {
-        std::cerr << "Failed to query history: " << mysql_error(m_mysql) << std::endl;
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "Failed to query history: " << mysql_error(conn) << std::endl;
+        releaseConnection(conn);
         return logs;
     }
 
-    MYSQL_RES* res = mysql_store_result(m_mysql);
-    if (!res) return logs;
+    MYSQL_RES* res = mysql_store_result(conn);
+    if (!res) {
+        releaseConnection(conn);
+        return logs;
+    }
 
     MYSQL_ROW row;
     while ((row = mysql_fetch_row(res))) {
@@ -185,5 +246,6 @@ std::vector<TransportLog> DatabaseHelper::getOrderHistory(const std::string& ord
         logs.push_back(log);
     }
     mysql_free_result(res);
+    releaseConnection(conn);
     return logs;
 }

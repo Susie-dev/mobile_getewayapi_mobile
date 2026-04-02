@@ -45,9 +45,23 @@
 
 ---
 
-## 🚀 三、 数据库配置与启动教程
+## 🚀 三、 服务端与数据库启动教程
 
-### 步骤 1：准备 MySQL 数据库
+本项目提供了**两种**启动方式：推荐使用 Docker 一键启动，或者手动编译启动。
+
+### 方式 A：Docker 容器化一键启动 (推荐)
+通过 Docker 和 docker-compose，无需配置 C++ 和 MySQL 环境，一键拉起所有后端服务：
+1. 确保电脑已安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
+2. 在项目根目录下，执行一键拉起命令：
+   ```bash
+   docker-compose up -d --build
+   ```
+3. 等待数据库初始化完成后（约 10 秒），后端服务器将在 `0.0.0.0:8888` 上提供服务。
+4. 可以通过 `docker-compose logs -f relay_server` 查看实时日志。
+
+### 方式 B：手动编译配置启动
+
+#### 步骤 1：准备 MySQL 数据库
 本项目使用 MySQL 进行数据的持久化存储，启动前请务必配置好数据库。
 1. 在 Linux/WSL 中安装 MySQL：
    ```bash

@@ -83,6 +83,18 @@ void RelayServer::OnMessage(spConnection conn, std::string& message)
         if (root.contains("action")) {
             QString action = root["action"].toString();
             
+            // 处理心跳保活指令
+            if (action == "ping") {
+                // 回复 pong
+                QJsonObject pongObj;
+                pongObj["type"] = "pong";
+                QJsonDocument pongDoc(pongObj);
+                QByteArray payload = pongDoc.toJson(QJsonDocument::Compact);
+                payload.append('\n');
+                conn->send(payload.data(), payload.size());
+                return; // 心跳不广播
+            }
+
             // 处理查询历史轨迹的指令
             if (action == "query_history" && root.contains("order_id")) {
                 std::string target_order = root["order_id"].toString().toStdString();

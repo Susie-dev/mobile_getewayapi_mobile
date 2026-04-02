@@ -21,6 +21,12 @@ public:
     // 插入模拟订单
     void insertMockData();
 
+    // 离线缓存：存储网络断开时未能发送的 JSON 数据
+    bool insertOfflineLog(const QByteArray &jsonData);
+
+    // 恢复网络时：获取并清空所有离线缓存的数据
+    QList<QByteArray> getAndClearOfflineLogs();
+
 private:
     QSqlDatabase m_db;
 };

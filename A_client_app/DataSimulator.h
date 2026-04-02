@@ -9,6 +9,7 @@
 #include <QGeoPositionInfo>
 
 #include "LLMService.h"
+#include "OrderDatabase.h"
 
 class DataSimulator : public QObject
 {
@@ -64,6 +65,8 @@ private:
     // 当前经纬度
     double m_longitude = 116.407396; // 默认北京，获取到真实GPS后更新
     double m_latitude = 39.904200;
+    
+    OrderDatabase m_dbHelper;
 };
 
 #endif // DATASIMULATOR_H

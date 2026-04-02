@@ -4,6 +4,8 @@
 #include <mutex>
 #include <vector>
 #include <map>
+#include <queue>
+#include <condition_variable>
 
 // 订单历史轨迹记录
 struct TransportLog {
@@ -35,7 +37,7 @@ public:
     }
 
     bool connect(const std::string& host, const std::string& user, 
-                 const std::string& passwd, const std::string& db_name, int port = 3306);
+                 const std::string& passwd, const std::string& db_name, int port = 3306, int pool_size = 10);
     
     void disconnect();
 
@@ -58,7 +60,18 @@ private:
     DatabaseHelper();
     ~DatabaseHelper();
 
-    MYSQL* m_mysql;
-    std::mutex m_mutex; // 简单的互斥锁，防止多线程并发写导致 MySQL 崩溃
+    MYSQL* getConnection();
+    void releaseConnection(MYSQL* conn);
+
+    std::queue<MYSQL*> m_pool;
+    std::mutex m_mutex;
+    std::condition_variable m_cond;
     bool m_isConnected;
+    
+    std::string m_host;
+    std::string m_user;
+    std::string m_passwd;
+    std::string m_db_name;
+    int m_port;
+    int m_poolSize;
 };

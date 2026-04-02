@@ -14,6 +14,9 @@ DataSimulator::DataSimulator(QObject *parent)
     connect(m_tcpSocket, &QTcpSocket::disconnected, this, &DataSimulator::onDisconnected);
     connect(m_tcpSocket, &QTcpSocket::errorOccurred, this, &DataSimulator::onErrorOccurred);
 
+    // 初始化本地数据库以便缓存离线数据
+    m_dbHelper.initDatabase();
+
     // 初始化大模型服务
     m_llmService = new LLMService(this);
     connect(m_llmService, &LLMService::dataReceived, this, &DataSimulator::onLLMDataReceived);
@@ -107,7 +110,18 @@ void DataSimulator::onConnected()
 {
     m_connectionStatus = "已连接到服务器";
     emit connectionStatusChanged();
-    qDebug() << "Connected to server!";
+    qDebug() << "Connected to server! Checking for offline logs...";
+
+    // 断点续传：恢复离线缓存数据
+    QList<QByteArray> offlineLogs = m_dbHelper.getAndClearOfflineLogs();
+    if (!offlineLogs.isEmpty()) {
+        qDebug() << "Found" << offlineLogs.size() << "offline logs. Sending now...";
+        for (const QByteArray &payload : offlineLogs) {
+            m_tcpSocket->write(payload);
+            m_tcpSocket->write("\n");
+        }
+        m_tcpSocket->flush();
+    }
 }
 
 void DataSimulator::onDisconnected()
@@ -176,13 +190,16 @@ void DataSimulator::onLLMDataReceived(const QString &weather, const QString &hum
     emit currentJsonChanged();
     emit dataGenerated(m_currentJson);
 
-    // 如果已连接到服务器，则发送数据
+    // 如果已连接到服务器，则发送数据；否则存入本地 SQLite
+    QByteArray payload = doc.toJson(QJsonDocument::Compact);
     if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
-        QByteArray payload = doc.toJson(QJsonDocument::Compact);
         payload.append('\n'); 
         m_tcpSocket->write(payload);
         m_tcpSocket->flush();
         qDebug() << "Sent data to server:" << payload;
+    } else {
+        qDebug() << "Socket disconnected! Caching payload offline.";
+        m_dbHelper.insertOfflineLog(payload);
     }
 }
 
